@@ -21,9 +21,9 @@ import org.gradle.api.Project
 import org.gradle.api.ProjectConfigurationException
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.SourceDirectorySet
-import org.gradle.api.internal.file.collections.DefaultDirectoryFileTreeFactory
 import org.gradle.api.internal.file.DefaultSourceDirectorySetFactory
 import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.internal.file.collections.DefaultDirectoryFileTreeFactory
 import org.gradle.api.internal.tasks.DefaultScalaSourceSet
 import org.gradle.api.tasks.scala.ScalaCompile
 import org.gradle.util.ConfigureUtil
@@ -78,8 +78,10 @@ public class AndroidScalaPlugin implements Plugin<Project> {
 
         project.afterEvaluate {
             updateAndroidSourceSetsExtension()
-            androidExtension.sourceSets.each { it.java.srcDirs(it.scala.srcDirs) }
-            def allVariants = androidExtension.testVariants + (isLibrary ? androidExtension.libraryVariants : androidExtension.applicationVariants)
+            androidExtension.sourceSets.each { srcSet ->
+                srcSet.java.srcDirs(srcSet.scala.srcDirs)
+            }
+            def allVariants = androidExtension.testVariants + androidExtension.unitTestVariants + (isLibrary ? androidExtension.libraryVariants : androidExtension.applicationVariants)
             allVariants.each { variant ->
                 addAndroidScalaCompileTask(variant)
             }
@@ -101,12 +103,12 @@ public class AndroidScalaPlugin implements Plugin<Project> {
      * @param androidExtension extension of Android Plugin
      */
     public void apply(Project project) {
-        if (!["com.android.application", 
-		"android", 
-		"com.android.library", 
-		"android-library",
-		"com.android.model.application",
-		"com.android.model.library"].any { project.plugins.findPlugin(it) }) {
+        if (!["com.android.application",
+              "android",
+              "com.android.library",
+              "android-library",
+              "com.android.model.application",
+              "com.android.model.library"].any { project.plugins.findPlugin(it) }) {
             throw new ProjectConfigurationException("Please apply 'com.android.application' or 'com.android.library' plugin before applying 'android-scala' plugin", null)
         }
         apply(project, project.extensions.getByName("android"))
@@ -171,6 +173,7 @@ public class AndroidScalaPlugin implements Plugin<Project> {
             def dirSetFactory = new DefaultSourceDirectorySetFactory(fileResolver, new DefaultDirectoryFileTreeFactory())
             sourceSet.convention.plugins.scala = new DefaultScalaSourceSet(sourceSet.name + "_AndroidScalaPlugin", dirSetFactory)
             def scala = sourceSet.scala
+
             scala.filter.include(include);
             def scalaSrcDir = ["src", sourceSet.name, "scala"].join(File.separator)
             scala.srcDir(scalaSrcDir)
@@ -256,7 +259,7 @@ public class AndroidScalaPlugin implements Plugin<Project> {
             scalaCompileTask.source = [] + new TreeSet(scalaCompileTask.source.collect { it } + javaCompileTask.source.collect { it }) // unique
             def noisyProperties = ["compiler", "includeJavaRuntime", "incremental", "optimize", "useAnt"]
             InvokerHelper.setProperties(scalaCompileTask.options,
-                javaCompileTask.options.properties.findAll { !noisyProperties.contains(it.key) })
+                    javaCompileTask.options.properties.findAll { !noisyProperties.contains(it.key) })
             noisyProperties.each { property ->
                 // Suppress message from deprecated/experimental property as possible
                 if (!javaCompileTask.options.hasProperty(property) || !scalaCompileTask.options.hasProperty(property)) {
